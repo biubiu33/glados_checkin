@@ -1,0 +1,16 @@
+# 忽略所有文件
+*
+
+# 排除（即保留）特定的文件
+!checkin.py
+!requirements.txt
+!.gitignore
+!README.md
+
+# 忽略常见的 Python 缓存和本地环境
+__pycache__/
+*.pyc
+.venv/
+.env
+config.json
+*.log
