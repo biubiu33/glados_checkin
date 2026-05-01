@@ -4,7 +4,7 @@ name: GLaDOS Daily Checkin
 on:
   schedule:
     # 每天北京时间上午 8:05 运行 (Cron 表达式是 UTC 时间，北京时间 = UTC + 8)
-    - cron: '5 0 * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch: # 允许手动点击按钮触发执行
 
 jobs:
