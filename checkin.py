@@ -32,11 +32,5 @@ def main_handler(event, context):
 
 
 if __name__ == '__main__':
-    import time
-    import random
-    # 在正式请求前随机等待 1 到 600 秒 (10分钟内)
-    sleep_time = random.randint(1, 600)
-    print(f"随机等待 {sleep_time} 秒后再执行签到...")
-    time.sleep(sleep_time)
     start()
 
