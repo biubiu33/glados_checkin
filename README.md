@@ -24,8 +24,30 @@
 | 变量名 | 必填 | 描述 |
 | :--- | :--- | :--- |
 | `COOKIE` | 是 | 填写获取到的 GLaDOS Cookie |
+| `USER_AGENT` | 建议配置 | 创建此登录会话的浏览器的完整 User-Agent，留空使用 Windows Chrome 默认标识 |
 | `SERVE` | 是 | 是否开启通知，填 `on` 或 `off` |
 | `SCKEY` | 否 | 填写 Server 酱的 SCKEY |
+
+在创建登录会话的浏览器中，打开开发者工具的 Network，刷新签到页面，选择 `status` 请求，将 Request Headers 中的 `user-agent` 完整单行值填入 `USER_AGENT`。只填写值。
+
+脚本会先获取签到 challenge，等待后提交 nonce 和 SHA-256 proof。签到与验证请求使用相同的 Cookie 和 User-Agent。
+
+若返回 `device-mismatch`，请核对 `USER_AGENT` 与登录浏览器是否一致。若返回 `code=-2` 或“没有权限”，请确认当前浏览器的 `status` 请求正常，再更新 `COOKIE`。脚本会让实际签到失败的 Actions 任务返回失败。
+
+### 本地运行
+
+安装依赖后运行 `python checkin.py`。也可在脚本同目录创建 `config.json`，环境变量优先于本地配置。
+
+```json
+{
+  "COOKIE": "填写当前登录会话的 Cookie",
+  "USER_AGENT": "填写同一浏览器的完整 User-Agent",
+  "SERVE": "off",
+  "SCKEY": ""
+}
+```
+
+`config.json` 已被 Git 忽略。测试命令为 `python -m unittest -v`，测试使用模拟请求。
 
 ### 3. 启用并测试脚本
 1.  点击仓库顶部的 **Actions** 标签页。
@@ -35,7 +57,7 @@
 
 ## ⏰ 定时任务说明
 脚本默认配置在 **北京时间每日上午 08:05** 左右运行（对应 Cron 表达式 `5 0 * * *`）。
-> **注意**：由于 GitHub Actions 调度器的排队机制，实际运行时间可能会比预定时间延迟 10-30 分钟。
+> GitHub Actions 可能排队，实际运行时间可能延后。
 
 ## 📜 免责声明
 本项目仅供编程学习交流使用，请勿用于商业用途。开发者不对因使用本脚本导致的任何账号问题负责。

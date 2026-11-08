@@ -3,6 +3,7 @@
 
 # 排除（即保留）特定的文件
 !checkin.py
+!test_checkin.py
 !requirements.txt
 !.gitignore
 !README.md
