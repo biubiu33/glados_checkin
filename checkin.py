@@ -10,6 +10,7 @@ import requests
 
 CHECKIN_URL = "https://glados.cloud/api/user/checkin"
 STATUS_URL = "https://glados.cloud/api/user/status"
+POINTS_URL = "https://glados.cloud/api/user/points"
 CHALLENGE_URL = CHECKIN_URL + "/challenge"
 REFERER = "https://glados.cloud/console/checkin"
 TIMEOUT = 20
@@ -201,6 +202,15 @@ def start(session=requests):
     balance = None
     if isinstance(items, list) and items and isinstance(items[0], dict):
         balance = items[0].get("balance")
+    if balance is None:
+        try:
+            points = read_json(session.get(POINTS_URL, headers=headers, timeout=TIMEOUT))
+            if points.get("code") == 0 and points.get("points") is not None:
+                balance = points["points"]
+            else:
+                print("积分查询失败，签到已确认。")
+        except (requests.RequestException, ValueError) as error:
+            print(f"积分查询失败：{type(error).__name__}，签到已确认。")
     content = (
         f"{message}，you have {integer_part(account.get('leftDays'))} days left "
         f"and {integer_part(balance)} points."

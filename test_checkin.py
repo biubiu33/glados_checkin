@@ -34,6 +34,7 @@ class CheckinTest(unittest.TestCase):
         self.session.get.side_effect = [
             response({"code": 0, "nonce": "test-nonce", "ttl": 300000}),
             response({"code": 0, "data": {"leftDays": "30.5"}}),
+            response({"code": 0, "points": "17.0000000000000000"}),
         ]
         self.session.post.return_value = response({
             "code": 0, "message": "Checkin! Got 5 points", "list": [{"balance": "10.5"}],
@@ -99,6 +100,39 @@ class CheckinTest(unittest.TestCase):
         result, output = self.run_checkin()
         self.assertTrue(result)
         self.assertIn("今日已签到", output)
+        self.assertIn("17 points", output)
+        self.session.get.assert_called_with(
+            checkin.POINTS_URL, headers=checkin.request_headers("test-cookie"), timeout=checkin.TIMEOUT,
+        )
+
+    def test_checkin_balance_avoids_extra_points_request(self):
+        self.assertTrue(self.run_checkin()[0])
+        self.assertEqual(self.session.get.call_count, 2)
+
+    def test_zero_points_is_displayed(self):
+        self.session.post.return_value = response({"code": 1, "repeated": True})
+        self.session.get.side_effect = [
+            response({"code": 0, "nonce": "test-nonce"}),
+            response({"code": 0, "data": {"leftDays": "30"}}),
+            response({"code": 0, "points": 0}),
+        ]
+        result, output = self.run_checkin()
+        self.assertTrue(result)
+        self.assertIn("0 points", output)
+
+    def test_points_failure_preserves_checkin_result(self):
+        for failure in (requests.Timeout("private-value"), response({"code": -2})):
+            with self.subTest(failure=type(failure).__name__):
+                self.session.post.return_value = response({"code": 1, "repeated": True})
+                self.session.get.side_effect = [
+                    response({"code": 0, "nonce": "test-nonce"}),
+                    response({"code": 0, "data": {"leftDays": "30"}}),
+                    failure,
+                ]
+                result, output = self.run_checkin()
+                self.assertTrue(result)
+                self.assertIn("积分查询失败", output)
+                self.assertNotIn("private-value", output)
 
     def test_business_rejection_does_not_report_success(self):
         self.session.post.return_value = response({"code": 4, "message": "rejected"})
