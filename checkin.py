@@ -88,6 +88,8 @@ def read_json(response):
 
 
 def failure_message(result):
+    if result.get("reason") == "turnstile":
+        return "服务端要求 Cloudflare Turnstile 人机验证，请在官网签到页面完成验证。"
     if result.get("reason") == "device-mismatch":
         return "设备不匹配，请将 USER_AGENT 设置为创建此登录会话的浏览器 User-Agent。"
     if result.get("code") == -2:

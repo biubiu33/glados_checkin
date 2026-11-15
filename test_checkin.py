@@ -138,6 +138,13 @@ class CheckinTest(unittest.TestCase):
         self.session.post.return_value = response({"code": 4, "message": "rejected"})
         self.assertFalse(self.run_checkin()[0])
 
+    def test_turnstile_rejection_reports_required_verification(self):
+        self.session.post.return_value = response({"code": 5, "reason": "turnstile"})
+        result, output = self.run_checkin()
+        self.assertFalse(result)
+        self.assertIn("Cloudflare Turnstile", output)
+        self.assertEqual(self.session.get.call_count, 1)
+
     def test_success_with_missing_or_malformed_points_is_supported(self):
         for items in (None, [], {}, "invalid", [None]):
             with self.subTest(items=items):
