@@ -19,7 +19,7 @@
 *   **Server 酱 SCKEY**：前往 [Server 酱官网](https://sct.ftqq.com/) 获取推送密钥（SCKEY）。
 
 ### 2. 设置 GitHub Secrets
-在你的 GitHub 仓库中，依次点击 `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`，添加以下三个变量：
+在你的 GitHub 仓库中，依次点击 `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`，添加以下变量：
 
 | 变量名 | 必填 | 描述 |
 | :--- | :--- | :--- |
@@ -27,23 +27,29 @@
 | `USER_AGENT` | 建议配置 | 创建此登录会话的浏览器的完整 User-Agent，留空使用 Windows Chrome 默认标识 |
 | `SERVE` | 是 | 是否开启通知，填 `on` 或 `off` |
 | `SCKEY` | 否 | 填写 Server 酱的 SCKEY |
+| `TWOCAPTCHA_API_KEY` | 需要自动求解时填写 | 2Captcha 账户的 API Key，求解会消耗该账户余额 |
 
 在创建登录会话的浏览器中，打开开发者工具的 Network，刷新签到页面，选择 `status` 请求，将 Request Headers 中的 `user-agent` 完整单行值填入 `USER_AGENT`。只填写值。
 
-GitHub 定时任务使用有界面的 Chromium，通过 Xvfb 虚拟显示打开官网签到页并点击 Checkin，由官网执行 challenge 和 Turnstile 流程。日志记录验证状态及是否提交验证令牌。网站要求人工验证时会报告失败并推送提示，需要在官网完成当次签到。
+GitHub 定时任务运行 `python checkin.py`。脚本先正常提交签到，服务端要求 Turnstile 时，使用新 challenge 调用 2Captcha，再提交求解令牌。每天已签到的响应会直接返回成功。
+
+每次运行最多创建一个付费求解任务，最长等待 180 秒，并受当前 challenge 有效期限制。余额不足、任务超时或服务端拒绝令牌会返回失败并推送原因。求解兼容性需要通过真实首次签到验证。
+
+2Captcha 会收到签到页面地址、公开 sitekey、`action=checkin` 和本次 nonce。该实现向 GLaDOS 发送 Cookie，向 2Captcha 发送其 API Key。配置该 Key 后，遇到验证要求会自动使用付费求解服务。接口说明见 [2Captcha 官方文档](https://2captcha.com/api-docs/cloudflare-turnstile)。
 
 若返回 `device-mismatch`，请核对 `USER_AGENT` 与登录浏览器是否一致。若返回 `code=-2` 或“没有权限”，请确认当前浏览器的 `status` 请求正常，再更新 `COOKIE`。脚本会让实际签到失败的 Actions 任务返回失败。
 
 ### 本地运行
 
-安装依赖后，运行 `python -m playwright install chromium` 安装浏览器，再运行 `python browser_checkin.py`。`python checkin.py` 使用 HTTP 接口流程。也可在脚本同目录创建 `config.json`，环境变量优先于本地配置。
+安装依赖后运行 `python checkin.py`。也可在脚本同目录创建 `config.json`，环境变量优先于本地配置。浏览器入口为 `python browser_checkin.py`，运行前需要执行 `python -m playwright install chromium`。
 
 ```json
 {
   "COOKIE": "填写当前登录会话的 Cookie",
   "USER_AGENT": "填写同一浏览器的完整 User-Agent",
   "SERVE": "off",
-  "SCKEY": ""
+  "SCKEY": "",
+  "TWOCAPTCHA_API_KEY": "填写 2Captcha API Key"
 }
 ```
 

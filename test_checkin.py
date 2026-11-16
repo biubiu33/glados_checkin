@@ -220,6 +220,119 @@ class CheckinTest(unittest.TestCase):
             with self.subTest(payload=payload):
                 self.assertFalse(checkin.checkin_result(payload))
 
+    def test_turnstile_fallback_uses_fresh_nonce_and_single_solver_task(self):
+        self.session.get.side_effect = [
+            response({"code": 0, "nonce": "first-nonce", "turnstile": "sitekey"}),
+            response({"code": 0, "nonce": "fresh-nonce", "turnstile": "sitekey"}),
+            response({"code": 0, "data": {"leftDays": "30"}}),
+        ]
+        self.session.post.side_effect = [
+            response({"code": 5, "reason": "turnstile"}),
+            response({"code": 0, "list": [{"balance": "20"}]}),
+        ]
+        with patch.dict(os.environ, {"TWOCAPTCHA_API_KEY": "private-api-key"}):
+            with patch.object(checkin, "solve_turnstile", return_value="private-token") as solve:
+                result, output = self.run_checkin()
+        self.assertTrue(result)
+        solve.assert_called_once()
+        self.assertEqual(solve.call_args.args[:3], ("private-api-key", "sitekey", "fresh-nonce"))
+        payload = self.session.post.call_args.kwargs["json"]
+        self.assertEqual(payload["nonce"], "fresh-nonce")
+        self.assertEqual(payload["turnstile"], "private-token")
+        self.assertEqual(payload["tsState"], "ok")
+        self.assertNotIn("private-token", output)
+        self.assertNotIn("private-api-key", output)
+
+    def test_repeated_checkin_avoids_paid_solver(self):
+        self.session.post.return_value = response({"code": 1, "repeated": True})
+        with patch.dict(os.environ, {"TWOCAPTCHA_API_KEY": "private-api-key"}):
+            with patch.object(checkin, "solve_turnstile") as solve:
+                self.assertTrue(self.run_checkin()[0])
+        solve.assert_not_called()
+
+    def test_missing_sitekey_avoids_paid_solver(self):
+        with patch.object(checkin, "solve_turnstile") as solve:
+            with self.assertRaises(checkin.CheckinError):
+                checkin.submit_checkin(self.session, {}, solver_key="private-api-key")
+        solve.assert_not_called()
+        self.session.post.assert_not_called()
+
+
+class SolverTest(unittest.TestCase):
+    def setUp(self):
+        clock = patch.object(checkin.time, "monotonic", return_value=0)
+        self.clock = clock.start()
+        self.addCleanup(clock.stop)
+        sleep = patch.object(checkin.time, "sleep")
+        self.sleep = sleep.start()
+        self.addCleanup(sleep.stop)
+
+    def test_solver_sends_only_required_task_data(self):
+        with patch.object(checkin.requests, "post", side_effect=[
+            response({"errorId": 0, "taskId": 123}),
+            response({"errorId": 0, "status": "processing"}),
+            response({"errorId": 0, "status": "ready", "solution": {"token": "private-token"}}),
+        ]) as post:
+            output = io.StringIO()
+            with redirect_stdout(output):
+                token = checkin.solve_turnstile("private-key", "sitekey", "nonce", 300)
+        self.assertEqual(token, "private-token")
+        self.assertNotIn("private-token", output.getvalue())
+        self.assertEqual(post.call_args_list[0].kwargs["json"], {
+            "clientKey": "private-key",
+            "task": {
+                "type": "TurnstileTaskProxyless", "websiteURL": checkin.REFERER,
+                "websiteKey": "sitekey", "action": "checkin", "data": "nonce",
+            },
+        })
+        self.assertEqual(post.call_args_list[1].kwargs["json"], {
+            "clientKey": "private-key", "taskId": 123,
+        })
+        self.assertEqual(post.call_count, 3)
+
+    def test_account_error_does_not_create_more_tasks(self):
+        with patch.object(checkin.requests, "post", return_value=response({
+            "errorId": 1, "errorCode": "ERROR_ZERO_BALANCE", "errorDescription": "private-key",
+        })) as post:
+            with self.assertRaisesRegex(checkin.CheckinError, "ERROR_ZERO_BALANCE") as caught:
+                checkin.solve_turnstile("private-key", "sitekey", "nonce", 300)
+        self.assertNotIn("private-key", str(caught.exception))
+        self.assertEqual(post.call_count, 1)
+
+    def test_network_error_is_safe_and_never_retried(self):
+        with patch.object(checkin.requests, "post", side_effect=requests.Timeout("private-key")) as post:
+            with self.assertRaises(checkin.CheckinError) as caught:
+                checkin.solve_turnstile("private-key", "sitekey", "nonce", 300)
+        self.assertNotIn("private-key", str(caught.exception))
+        self.assertEqual(post.call_count, 1)
+
+    def test_timeout_does_not_create_another_paid_task(self):
+        self.clock.side_effect = [0, 0, 181]
+        with patch.object(checkin, "solver_request", return_value={"taskId": 123}) as request:
+            with self.assertRaisesRegex(checkin.CheckinError, "超时"):
+                checkin.solve_turnstile("private-key", "sitekey", "nonce", 300)
+        self.assertEqual(request.call_count, 1)
+
+    def test_short_lived_challenge_does_not_create_task(self):
+        with patch.object(checkin, "solver_request") as request:
+            with self.assertRaises(checkin.CheckinError):
+                checkin.solve_turnstile("private-key", "sitekey", "nonce", 5)
+        request.assert_not_called()
+
+    def test_malformed_solver_response_is_rejected(self):
+        for task_result in (
+            {"errorId": 0, "status": "ready", "solution": {}},
+            {"errorId": 0, "status": "ready", "solution": {"token": ""}},
+            {"errorId": 0, "status": "unknown"},
+            {"errorId": 0, "status": "ready", "solution": []},
+        ):
+            with self.subTest(task_result=task_result):
+                with patch.object(checkin.requests, "post", side_effect=[
+                    response({"errorId": 0, "taskId": 123}), response(task_result),
+                ]):
+                    with self.assertRaises(checkin.CheckinError):
+                        checkin.solve_turnstile("private-key", "sitekey", "nonce", 300)
+
 
 if __name__ == "__main__":
     unittest.main()
