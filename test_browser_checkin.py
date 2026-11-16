@@ -24,6 +24,7 @@ class BrowserCheckinTest(unittest.TestCase):
     def test_uses_normal_website_button_and_session(self):
         result = browser_checkin.submit_browser("gld:sess=abc==; gld:sess.sig=signature;", "test-browser")
         self.assertEqual(result["code"], 0)
+        self.engine.return_value.__enter__.return_value.chromium.launch.assert_called_once_with(headless=False)
         self.context.add_cookies.assert_called_once_with([
             {"name": "gld:sess", "value": "abc==", "url": "https://glados.cloud"},
             {"name": "gld:sess.sig", "value": "signature", "url": "https://glados.cloud"},

@@ -35,4 +35,4 @@ jobs:
           SCKEY: ${{ secrets.SCKEY }}
           COOKIE: ${{ secrets.COOKIE }}
           USER_AGENT: ${{ secrets.USER_AGENT }}
-        run: python browser_checkin.py
+        run: xvfb-run -a python browser_checkin.py

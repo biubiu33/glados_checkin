@@ -16,7 +16,7 @@ def submit_browser(cookie, user_agent):
         cookies.append({"name": name, "value": value, "url": "https://glados.cloud"})
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=False)
         try:
             context = browser.new_context(user_agent=user_agent, locale="en-US")
             context.add_cookies(cookies)
