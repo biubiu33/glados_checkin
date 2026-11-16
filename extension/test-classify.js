@@ -89,6 +89,12 @@ const cases = [
     { code: 0, repeated: true, points: 0, message: 'x' }, 'repeat', 0],
   ['未知响应',
     { code: 99, message: 'something odd' }, 'fail', 0],
+  ['会话拒绝优先于重复标记',
+    { code: -2, repeated: true }, 'fail', 0],
+  ['布尔 code 不应判成功',
+    { code: false }, 'fail', 0],
+  ['自动化拒绝优先于成功 code',
+    { code: 0, message: 'Automated check-in detected' }, 'fail', 0],
   ['空对象',
     {}, 'fail', 0],
   // ---- 无服务端响应（本次修复的重点：绝不能默认成功）----

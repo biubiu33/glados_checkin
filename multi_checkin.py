@@ -706,7 +706,7 @@ def parse_checkin(raw: Optional[Dict], domain: str, log: Callable[..., None], ua
         return result
 
     code = raw.get("code")
-    if isinstance(code, str) and code.strip().isdigit():
+    if isinstance(code, str) and re.fullmatch(r"-?\d+", code.strip()):
         code = int(code.strip())
     message = str(raw.get("message", "无消息字段"))
     points = earned_points(raw)
@@ -723,7 +723,7 @@ def parse_checkin(raw: Optional[Dict], domain: str, log: Callable[..., None], ua
 
     if (
         isinstance(code, bool)
-        or raw.get("reason") == "turnstile"
+        or raw.get("reason") in ("turnstile", "device-mismatch")
         or "automated check-in detected" in message.lower()
         or (isinstance(code, int) and code not in (0, 1))
     ):

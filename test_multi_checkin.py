@@ -74,6 +74,8 @@ class MultiCoreTest(unittest.TestCase):
     def test_rejection_flags_cannot_be_overridden_by_repeated(self):
         for payload in (
             {"code": -2, "repeated": True},
+            {"code": "-2", "repeated": True},
+            {"code": 0, "reason": "device-mismatch"},
             {"code": 5, "reason": "turnstile", "repeated": True},
             {"code": False},
             {"code": 0, "message": "Automated check-in detected"},

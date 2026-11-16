@@ -577,6 +577,12 @@ function classifyResult(data, fallbackText) {
     return { status: 'device', points: 0, message: message || '设备与登录不一致', raw: data };
   }
 
+  if ((rawCode != null && typeof rawCode !== 'string' && typeof rawCode !== 'number') ||
+      (code != null && code !== 0 && code !== 1) ||
+      lower.includes('automated check-in detected')) {
+    return { status: 'fail', points: 0, message: message || '服务端拒绝签到', raw: data };
+  }
+
   const points = Number(
     data.points != null ? data.points : (data.earned != null && typeof data.earned !== 'object' ? data.earned : 0)
   ) || 0;
