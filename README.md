@@ -1,69 +1,131 @@
-# GLADOS自动签到脚本（新版）
+# GLaDOS 每日签到
 
-![GLaDOS Checkin](https://img.shields.io/badge/GLaDOS-Checkin-brightgreen?style=flat-square&logo=github-actions)
-![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square&logo=python)
+支持 GitHub Actions 定时签到和本机 Chrome / Edge 浏览器扩展，提供多账号、多域名探测、积分兑换、结果推送及签到日历。
 
-本项目基于 GitHub Actions 实现 GLaDOS 网站的每日自动签到，并通过 Server 酱推送签到结果至微信。
+## 浏览器扩展
 
-## 📋 功能特点
+1. 下载并解压本仓库。
+2. 打开 `chrome://extensions` 或 `edge://extensions`，开启开发者模式。
+3. 点击“加载已解压的扩展程序”，选择 `extension` 目录。
+4. 在同一浏览器登录 GLaDOS，扩展中添加账号，认证方式选择“浏览器登录态”。
+5. 设置签到时段，保存后点击“立即签到”，核对服务端签到记录。
 
-*   **全自动运行**：利用 GitHub Actions 每日定时触发，无需人工干预。
-*   **安全合规**：所有敏感信息（Cookie、Key）均存储在 GitHub Secrets 中，不会在代码中泄露。
-*   **状态推送**：支持通过 Server 酱实时推送签到结果和账户剩余天数。
-*   **双触发模式**：支持每日定时自动执行，也支持在 GitHub 后台手动点击触发。
+扩展包含以下功能。
 
-## 🛠️ 配置步骤
+- 浏览器登录态及手动 Cookie 多账号，支持 8 个站点。
+- 在官网页面点击签到按钮，由网页执行 challenge 和 Turnstile。
+- 定时运行、启动补签、随机延迟、每日已签跳过及最多 3 次退避重试。
+- 30 天签到日历、账户身份核对、积分兑换、桌面通知和汇总推送。
+- Cookie 模式的请求头注入同时限制目标域名和临时标签页。
 
-### 1. 获取相关参数
-*   **GLaDOS Cookie**：登录 [GLaDOS](https://glados.rocks/)，打开开发者工具 (F12)，在网络 (Network) 选项卡中找 `checkin` 请求，复制其 Header 中的 `cookie`。
-*   **Server 酱 SCKEY**：前往 [Server 酱官网](https://sct.ftqq.com/) 获取推送密钥（SCKEY）。
+扩展运行时需要电脑开机、浏览器保持运行。交互式 Turnstile 可能需要手动完成。首次签到的自动验证效果需要在实际浏览器环境中确认。
 
-### 2. 设置 GitHub Secrets
-在你的 GitHub 仓库中，依次点击 `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`，添加以下变量：
+完整操作见 [扩展说明](extension/README.md)。当前扩展版本为 `1.0.2`。
 
-| 变量名 | 必填 | 描述 |
-| :--- | :--- | :--- |
-| `COOKIE` | 是 | 填写获取到的 GLaDOS Cookie |
-| `USER_AGENT` | 建议配置 | 创建此登录会话的浏览器的完整 User-Agent，留空使用 Windows Chrome 默认标识 |
-| `SERVE` | 是 | 是否开启通知，填 `on` 或 `off` |
-| `SCKEY` | 否 | 填写 Server 酱的 SCKEY |
-| `TWOCAPTCHA_API_KEY` | 需要自动求解时填写 | 2Captcha 账户的 API Key，求解会消耗该账户余额 |
+## GitHub Actions
 
-在创建登录会话的浏览器中，打开开发者工具的 Network，刷新签到页面，选择 `status` 请求，将 Request Headers 中的 `user-agent` 完整单行值填入 `USER_AGENT`。只填写值。
+工作流支持手动运行，默认每天北京时间 08:05 和 12:18 运行，并发任务排队执行。工作流包含定时保活步骤，运行时间可能受 GitHub 排队影响。
 
-GitHub 定时任务运行 `python checkin.py`。脚本先正常提交签到，服务端要求 Turnstile 时，使用新 challenge 调用 2Captcha，再提交求解令牌。每天已签到的响应会直接返回成功。
+在仓库 Settings → Secrets and variables → Actions 配置对应的 Secrets。
 
-每次运行最多创建一个付费求解任务，最长等待 180 秒，并受当前 challenge 有效期限制。余额不足、任务超时或服务端拒绝令牌会返回失败并推送原因。求解兼容性需要通过真实首次签到验证。
+| 名称 | 用途 |
+| --- | --- |
+| `GLADOS_COOKIES` | 多账号 JSON 数组，启用多账号引擎 |
+| `GLADOS_EXCHANGE_PLAN` | 可选 `plan100`、`plan200`、`plan500`，填写后启用积分兑换 |
+| `GLADOS_VERBOSE` | 填写 `true` 开启详细日志 |
+| `SERVERCHAN_SENDKEY` | Server 酱 SendKey |
+| `PUSHDEER_SENDKEY` | PushDeer SendKey |
+| `TWOCAPTCHA_API_KEY` | 可选的 2Captcha 付费求解服务 |
 
-2Captcha 会收到签到页面地址、公开 sitekey、`action=checkin` 和本次 nonce。该实现向 GLaDOS 发送 Cookie，向 2Captcha 发送其 API Key。配置该 Key 后，遇到验证要求会自动使用付费求解服务。接口说明见 [2Captcha 官方文档](https://2captcha.com/api-docs/cloudflare-turnstile)。
+`GLADOS_COOKIES` 示例。
 
-若返回 `device-mismatch`，请核对 `USER_AGENT` 与登录浏览器是否一致。若返回 `code=-2` 或“没有权限”，请确认当前浏览器的 `status` 请求正常，再更新 `COOKIE`。脚本会让实际签到失败的 Actions 任务返回失败。
+```json
+[
+  {
+    "name": "主账号",
+    "origin": "glados.cloud",
+    "cookie": "gld:sess=填写会话; gld:sess.sig=填写签名",
+    "user-agent": "填写创建会话的浏览器 User-Agent"
+  },
+  {
+    "name": "其他账号",
+    "origin": "railgun.info",
+    "cookie": "填写该账号完整 Cookie"
+  }
+]
+```
 
-### 本地运行
+每个账号支持 `name`、`origin`、`cookie`、`user-agent` 四个字段。Cookie 重复时自动去重，未配置域名时依次探测 8 个内置站点。设备不匹配且未指定 UA 时，会根据登录设备平台重试一次。
 
-安装依赖后运行 `python checkin.py`。也可在脚本同目录创建 `config.json`，环境变量优先于本地配置。浏览器入口为 `python browser_checkin.py`，运行前需要执行 `python -m playwright install chromium`。
+多账号任务分别判断成功、重复签到和失败，查询总积分后统一推送。兑换只在成功或重复签到后执行，兑换请求关闭自动重试。任一账号签到失败，工作流返回失败。
+
+## 现有配置兼容
+
+原有单账号 `COOKIE`、`USER_AGENT`、`SERVE`、`SCKEY` 继续可用。
+
+- 只使用原配置时，执行原有单账号流程。
+- 配置 `GLADOS_COOKIES`、积分兑换、详细日志或新版推送字段时，进入多账号流程。
+- 多账号流程可使用原 `COOKIE` 和 `USER_AGENT` 生成一个账号。
+- 原 `SERVE=on` 时，`SCKEY` 可作为 `SERVERCHAN_SENDKEY` 的兼容配置。
+- 配置了 `GLADOS_COOKIES` 时，账号数组提供各账号的 Cookie 和 User-Agent。
+
+## Turnstile 与第三方求解
+
+HTTP 流程在收到 `reason=turnstile` 后，可用 `TWOCAPTCHA_API_KEY` 请求一次 2Captcha 求解，再用新 challenge 提交验证令牌。单账号和多账号流程均支持此配置。
+
+每次账号处理最多创建一个付费求解任务，最长等待 180 秒，并受 challenge 有效期限制。2Captcha 接收签到页面地址、公开 sitekey、`action=checkin` 和本次 nonce。配置该 Key 后，遇到验证要求会消耗服务账户余额。
+
+第三方令牌被 GLaDOS 接受的情况需要真实验证。官方浏览器扩展流程也可能遇到人工验证要求。
+
+## 本地运行
+
+```powershell
+python -m pip install -r requirements.txt
+python checkin.py
+```
+
+可在脚本同目录创建已被 Git 忽略的 `config.json`。环境变量优先。
 
 ```json
 {
-  "COOKIE": "填写当前登录会话的 Cookie",
-  "USER_AGENT": "填写同一浏览器的完整 User-Agent",
+  "COOKIE": "填写当前登录会话 Cookie",
+  "USER_AGENT": "填写同一浏览器 User-Agent",
   "SERVE": "off",
-  "SCKEY": "",
-  "TWOCAPTCHA_API_KEY": "填写 2Captcha API Key"
+  "SCKEY": ""
 }
 ```
 
-`config.json` 已被 Git 忽略。测试命令为 `python -m unittest -v`，测试使用模拟请求。
+多账号本地配置可直接使用 JSON 数组。
 
-### 3. 启用并测试脚本
-1.  点击仓库顶部的 **Actions** 标签页。
-2.  在左侧选择 **GLaDOS Daily Checkin** 工作流。
-3.  点击右侧的 **Run workflow** 下拉菜单，点击 **Run workflow** 按钮进行手动测试。
-4.  若出现绿色对号，说明配置成功。
+```json
+{
+  "GLADOS_COOKIES": [
+    {
+      "name": "主账号",
+      "origin": "glados.cloud",
+      "cookie": "填写完整 Cookie",
+      "user-agent": "填写浏览器 User-Agent"
+    }
+  ],
+  "SERVERCHAN_SENDKEY": "",
+  "PUSHDEER_SENDKEY": "",
+  "GLADOS_EXCHANGE_PLAN": ""
+}
+```
 
-## ⏰ 定时任务说明
-脚本默认配置在 **北京时间每日上午 08:05** 左右运行（对应 Cron 表达式 `5 0 * * *`）。
-> GitHub Actions 可能排队，实际运行时间可能延后。
+Playwright 入口为 `python browser_checkin.py`，使用前执行 `python -m playwright install chromium`。Linux 有界面运行需要虚拟显示，例如 `xvfb-run -a python browser_checkin.py`。
 
-## 📜 免责声明
-本项目仅供编程学习交流使用，请勿用于商业用途。开发者不对因使用本脚本导致的任何账号问题负责。
+## 验证
+
+```powershell
+python -m unittest -v
+node extension/test-classify.js
+```
+
+测试使用模拟请求，覆盖单账号与多账号配置、结果判断、第三方求解、兑换重试设置、日志脱敏及扩展 Cookie 规则隔离。
+
+## 源码来源与许可
+
+多账号核心 `multi_checkin.py`、`logging_config.py` 和 `extension/` 基于 [Devilstore/Glados-Railgun-checkin](https://github.com/Devilstore/Glados-Railgun-checkin) 的提交 `8ca67db195ebb40cc91951005d0f2bfc63daaf72`，保留原作者 MIT 许可。兼容配置、失败退出状态和 Cookie 规则范围已针对本仓库调整。
+
+许可见 [LICENSE](LICENSE)。

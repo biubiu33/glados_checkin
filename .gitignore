@@ -3,12 +3,21 @@
 
 # 排除（即保留）特定的文件
 !checkin.py
+!multi_checkin.py
+!logging_config.py
 !browser_checkin.py
 !test_checkin.py
 !test_browser_checkin.py
+!test_multi_checkin.py
 !requirements.txt
 !.gitignore
 !README.md
+!LICENSE
+!.github/
+!.github/workflows/
+!.github/workflows/daily_checkin.yml
+!extension/
+!extension/**
 
 # 忽略常见的 Python 缓存和本地环境
 __pycache__/

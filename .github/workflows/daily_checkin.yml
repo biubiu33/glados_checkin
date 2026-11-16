@@ -5,16 +5,25 @@ on:
   schedule:
     # 每天北京时间上午 8:05 运行 (Cron 表达式是 UTC 时间，北京时间 = UTC + 8)
     - cron: '5 0 * * *'
+    # 每天北京时间 12:18 再运行一次
+    - cron: '18 4 * * *'
   workflow_dispatch: # 允许手动点击按钮触发执行
+
+concurrency:
+  group: glados-daily-checkin
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -25,6 +34,12 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: Run Python tests
+        run: python -m unittest -q
+
+      - name: Run extension tests
+        run: node extension/test-classify.js
+
       - name: Run checkin script
         env:
           # 从 GitHub Secrets 中读取变量
@@ -33,4 +48,13 @@ jobs:
           COOKIE: ${{ secrets.COOKIE }}
           USER_AGENT: ${{ secrets.USER_AGENT }}
           TWOCAPTCHA_API_KEY: ${{ secrets.TWOCAPTCHA_API_KEY }}
+          GLADOS_COOKIES: ${{ secrets.GLADOS_COOKIES }}
+          GLADOS_EXCHANGE_PLAN: ${{ secrets.GLADOS_EXCHANGE_PLAN }}
+          GLADOS_VERBOSE: ${{ secrets.GLADOS_VERBOSE }}
+          PUSHDEER_SENDKEY: ${{ secrets.PUSHDEER_SENDKEY }}
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: python checkin.py
+
+      - name: Keep scheduled workflow active
+        if: ${{ !cancelled() }}
+        uses: liskin/gh-workflow-keepalive@v1

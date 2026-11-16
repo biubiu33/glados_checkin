@@ -4,6 +4,7 @@ import math
 import os
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import requests
 
@@ -136,7 +137,7 @@ def solver_request(method, payload, timeout):
     return result
 
 
-def solve_turnstile(api_key, sitekey, nonce, expires_at):
+def solve_turnstile(api_key, sitekey, nonce, expires_at, website_url=REFERER):
     deadline = min(time.monotonic() + 180, expires_at - 5)
     remaining = deadline - time.monotonic()
     if remaining <= 5:
@@ -145,7 +146,7 @@ def solve_turnstile(api_key, sitekey, nonce, expires_at):
         "clientKey": api_key,
         "task": {
             "type": "TurnstileTaskProxyless",
-            "websiteURL": REFERER,
+            "websiteURL": website_url,
             "websiteKey": sitekey,
             "action": "checkin",
             "data": nonce,
@@ -178,7 +179,8 @@ def solve_turnstile(api_key, sitekey, nonce, expires_at):
 
 
 def submit_checkin(session, headers, solver_key=""):
-    challenge = read_json(session.get(CHALLENGE_URL, headers=headers, timeout=TIMEOUT))
+    origin = headers.get("origin", "https://glados.cloud").rstrip("/")
+    challenge = read_json(session.get(origin + "/api/user/checkin/challenge", headers=headers, timeout=TIMEOUT))
     if type(challenge.get("code")) is not int or challenge["code"] != 0:
         raise CheckinError(failure_message(challenge))
     nonce = challenge.get("nonce")
@@ -193,17 +195,20 @@ def submit_checkin(session, headers, solver_key=""):
     received_at = time.monotonic()
     proof = hashlib.sha256((nonce + ".glados-observe-v1").encode("utf-8")).hexdigest()
     time.sleep(CHALLENGE_DELAY)
-    payload = {"token": "glados.cloud", "nonce": nonce, "proof": proof}
+    payload = {"token": urlsplit(origin).hostname, "nonce": nonce, "proof": proof}
     if solver_key:
         sitekey = challenge.get("turnstile")
         if not isinstance(sitekey, str) or not 0 < len(sitekey) <= 256:
             raise CheckinError("签到 challenge 未提供有效的 Turnstile sitekey。")
-        payload["turnstile"] = solve_turnstile(solver_key, sitekey, nonce, received_at + ttl / 1000)
+        payload["turnstile"] = solve_turnstile(
+            solver_key, sitekey, nonce, received_at + ttl / 1000,
+            website_url=origin + "/console/checkin",
+        )
         payload["tsState"] = "ok"
     if (time.monotonic() - received_at) * 1000 >= ttl:
         raise CheckinError("签到 challenge 已过期，请重新运行。")
     return read_json(session.post(
-        CHECKIN_URL,
+        origin + "/api/user/checkin",
         headers={**headers, "content-type": "application/json;charset=UTF-8"},
         json=payload,
         timeout=TIMEOUT,
@@ -216,6 +221,32 @@ def start(session=requests):
     except ValueError as error:
         print(f"签到失败：{error}")
         return False
+
+    multi_fields = (
+        "GLADOS_COOKIES", "GLADOS_EXCHANGE_PLAN", "GLADOS_VERBOSE",
+        "PUSHDEER_SENDKEY", "SERVERCHAN_SENDKEY",
+    )
+    multi_config = {name: setting(name, config) for name in multi_fields}
+    raw_accounts = os.getenv("GLADOS_COOKIES")
+    if raw_accounts is None:
+        raw_accounts = config.get("GLADOS_COOKIES", "")
+    if raw_accounts or any(multi_config.values()):
+        import multi_checkin
+
+        if not raw_accounts:
+            raw_accounts = [{
+                "cookie": setting("COOKIE", config),
+                "origin": "glados.cloud",
+                "user-agent": setting("USER_AGENT", config),
+            }]
+        multi_config["GLADOS_COOKIES"] = (
+            raw_accounts if isinstance(raw_accounts, str)
+            else json.dumps(raw_accounts, ensure_ascii=False)
+        )
+        multi_config["TWOCAPTCHA_API_KEY"] = setting("TWOCAPTCHA_API_KEY", config)
+        if not multi_config["SERVERCHAN_SENDKEY"] and setting("SERVE", config, "off").lower() == "on":
+            multi_config["SERVERCHAN_SENDKEY"] = setting("SCKEY", config)
+        return multi_checkin.main(multi_config)
 
     cookie = setting("COOKIE", config)
     serve = setting("SERVE", config, "off").lower()
