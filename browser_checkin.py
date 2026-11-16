@@ -41,6 +41,14 @@ def submit_browser(cookie, user_agent):
             response = pending.value
             if not response.ok:
                 raise checkin.CheckinError(f"浏览器签到请求失败（HTTP {response.status}）。")
+            submitted = response.request.post_data_json
+            if not isinstance(submitted, dict):
+                raise checkin.CheckinError("浏览器签到请求格式异常。")
+            state = submitted.get("tsState")
+            if state not in ("ok", "off", "timeout", "error"):
+                state = "unknown"
+            has_token = isinstance(submitted.get("turnstile"), str) and bool(submitted["turnstile"])
+            print(f"Turnstile 验证状态={state}，已提交验证令牌={has_token}")
             result = response.json()
             if not isinstance(result, dict):
                 raise checkin.CheckinError("浏览器签到响应格式异常。")

@@ -18,6 +18,7 @@ class BrowserCheckinTest(unittest.TestCase):
         self.context.request.get.return_value.json.return_value = {"code": 0}
         self.page = self.context.new_page.return_value
         pending = self.page.expect_response.return_value.__enter__.return_value
+        pending.value.request.post_data_json = {"tsState": "off"}
         pending.value.json.return_value = {"code": 0, "list": [{"balance": "89"}]}
 
     def test_uses_normal_website_button_and_session(self):
@@ -34,6 +35,16 @@ class BrowserCheckinTest(unittest.TestCase):
         with self.assertRaises(checkin.CheckinError):
             browser_checkin.submit_browser("invalid-cookie", "test-browser")
         self.engine.assert_not_called()
+
+    def test_verification_diagnostics_hide_token(self):
+        pending = self.page.expect_response.return_value.__enter__.return_value
+        pending.value.request.post_data_json = {"tsState": "ok", "turnstile": "private-token"}
+        output = io.StringIO()
+        with redirect_stdout(output):
+            browser_checkin.submit_browser("gld:sess=test", "test-browser")
+        self.assertIn("状态=ok", output.getvalue())
+        self.assertIn("令牌=True", output.getvalue())
+        self.assertNotIn("private-token", output.getvalue())
 
     def test_expired_session_closes_browser_without_checkin(self):
         self.context.request.get.return_value.json.return_value = {"code": -2}
