@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -25,6 +25,9 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
       - name: Run checkin script
         env:
           # 从 GitHub Secrets 中读取变量
@@ -32,4 +35,4 @@ jobs:
           SCKEY: ${{ secrets.SCKEY }}
           COOKIE: ${{ secrets.COOKIE }}
           USER_AGENT: ${{ secrets.USER_AGENT }}
-        run: python checkin.py
+        run: python browser_checkin.py

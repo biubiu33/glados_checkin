@@ -180,6 +180,10 @@ def start(session=requests):
         notify(serve, sckey, "GLaDOS 签到失败", message)
         return False
 
+    return report_result(session, headers, checkin, serve, sckey)
+
+
+def report_result(session, headers, checkin, serve, sckey):
     if not checkin_result(checkin):
         message = failure_message(checkin)
         print(f"签到失败：{message}")

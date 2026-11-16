@@ -30,13 +30,13 @@
 
 在创建登录会话的浏览器中，打开开发者工具的 Network，刷新签到页面，选择 `status` 请求，将 Request Headers 中的 `user-agent` 完整单行值填入 `USER_AGENT`。只填写值。
 
-脚本会先获取签到 challenge，等待后提交 nonce 和 SHA-256 proof。签到与验证请求使用相同的 Cookie 和 User-Agent。
+GitHub 定时任务使用 Chromium 打开官网签到页并点击 Checkin，由官网执行 challenge 和 Turnstile 流程。网站要求人工验证时会报告失败并推送提示，需要在官网完成当次签到。
 
 若返回 `device-mismatch`，请核对 `USER_AGENT` 与登录浏览器是否一致。若返回 `code=-2` 或“没有权限”，请确认当前浏览器的 `status` 请求正常，再更新 `COOKIE`。脚本会让实际签到失败的 Actions 任务返回失败。
 
 ### 本地运行
 
-安装依赖后运行 `python checkin.py`。也可在脚本同目录创建 `config.json`，环境变量优先于本地配置。
+安装依赖后，运行 `python -m playwright install chromium` 安装浏览器，再运行 `python browser_checkin.py`。`python checkin.py` 使用 HTTP 接口流程。也可在脚本同目录创建 `config.json`，环境变量优先于本地配置。
 
 ```json
 {
